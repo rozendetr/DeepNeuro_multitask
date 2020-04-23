@@ -11,8 +11,9 @@ import os
 import argparse
 
 from models import *
+from utils import *
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
+parser = argparse.ArgumentParser(description='PyTorch FashionMNIST Training')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
 args = parser.parse_args()
@@ -59,7 +60,7 @@ classes_fashionmnist = ("T-shirt/top", "Trouser", "Pullover",
 
 
 print('==> Building model..')
-net = ResNet18()
+net = resnet18()
 net = net.to(device)
 if device == 'cuda':
     net = torch.nn.DataParallel(net)
@@ -86,10 +87,10 @@ def train(epoch):
     """
     print('\nEpoch: %d' % epoch)
     l_rate = 0.1
-    if 25 <= epoch < 40:
-        l_rate *= 0.1
-    if epoch >= 40:
-        l_rate *= 0.01
+    if 50 <= epoch < 100:
+        l_rate = 0.01
+    if epoch >= 100:
+        l_rate = 0.001
     optimizer = optim.SGD(net.parameters(), lr=l_rate,
                           momentum=0.9, weight_decay=5e-4)
     net.train()
@@ -108,6 +109,8 @@ def train(epoch):
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
+        progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                     % (train_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
 
 def test(epoch):
@@ -126,6 +129,9 @@ def test(epoch):
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
+
+            progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                         % (test_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
     # Save checkpoint.
     acc = 100. * correct / total
