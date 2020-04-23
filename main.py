@@ -91,9 +91,6 @@ classes_fashionmnist = ("T-shirt/top", "Trouser", "Pullover",
 print('==> Building model..')
 net = ResNet_2head()
 net = net.to(device)
-if device == 'cuda':
-    net = torch.nn.DataParallel(net)
-    cudnn.benchmark = True
 
 if args.resume:
     # Load checkpoint.
@@ -112,25 +109,115 @@ optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e
 def train(epoch):
     print('\nEpoch: %d' % epoch)
     net.train()
+
+    # net.freeze_shared(False)
     train_loss = 0
-    correct = 0
-    total = 0
-    for batch_idx, (inputs, targets) in enumerate(trainloader_cifar10):
-        inputs, targets = inputs.to(device), targets.to(device)
+    total_cifar10 = 0
+    total_fashionmnist = 0
+    correct_cifar10 = 0
+    correct_fashionmnist = 0
+
+    len_train_cifar10 = len(trainloader_cifar10)
+    len_train_fashionmnist = len(trainloader_fashionmnist)
+
+    iter_cifar10 = iter(trainloader_cifar10)
+    iter_fashionmnist = iter(trainloader_fashionmnist)
+
+    for batch_idx in range(min(len_train_cifar10, len_train_fashionmnist)):
+        batch_cifar10 = next(iter_cifar10)
+        batch_fashionmnist = next(iter_fashionmnist)
+
+        input_cifar10, target_cifar10 = batch_cifar10[0].to(device), \
+                                        batch_cifar10[1].to(device)
+        input_fashionmnist, target_fashionmnist = batch_fashionmnist[0].to(device), \
+                                                  batch_fashionmnist[1].to(device)
+
         optimizer.zero_grad()
-        out_1, out_2 = net(inputs)
-        loss_1 = criterion(out_1, targets)
-        loss_1.backward()
+
+        out_cifar10, _ = net(input_cifar10)
+        _, out_fashionmnist = net(input_fashionmnist)
+
+        loss_cifar10 = criterion(out_cifar10, target_cifar10)
+        loss_fashionmnist = criterion(out_fashionmnist, target_fashionmnist)
+
+        loss = loss_cifar10 + loss_fashionmnist
+        loss.backward()
         optimizer.step()
 
-        train_loss += loss_1.item()
-        _, predicted = out_1.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
+        train_loss += loss.item()
+        _, predicted_cifar10 = out_cifar10.max(1)
+        _, predicted_fashionmnist = out_fashionmnist.max(1)
+        total_cifar10 += target_cifar10.size(0)
+        total_fashionmnist += target_fashionmnist.size(0)
+        correct_cifar10 += predicted_cifar10.eq(target_cifar10).sum().item()
+        correct_fashionmnist += predicted_fashionmnist.eq(target_fashionmnist).sum().item()
 
-        progress_bar(batch_idx, len(trainloader_cifar10), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                     % (train_loss / (batch_idx + 1), 100. * correct / total, correct, total))
+        progress_bar(batch_idx, min(len_train_cifar10, len_train_fashionmnist),
+                     F"Loss: {train_loss/(batch_idx+1):.3f} | "
+                     F"Acc_CIFAR10: {100.*correct_cifar10/total_cifar10:.3f} | "
+                     F"Acc_FashionMNIST: {100.*correct_fashionmnist/total_fashionmnist:.3f} ")
+
+
+def test(epoch):
+    global best_acc
+    net.eval()
+    test_loss = 0
+    total_cifar10 = 0
+    total_fashionmnist = 0
+    correct_cifar10 = 0
+    correct_fashionmnist = 0
+    len_test_cifar10 = len(testloader_cifar10)
+    len_test_fashionmnist = len(testloader_fashionmnist)
+
+    iter_cifar10 = iter(testloader_cifar10)
+    iter_fashionmnist = iter(testloader_fashionmnist)
+
+    with torch.no_grad():
+        for batch_idx in range(min(len_test_cifar10, len_test_fashionmnist)):
+            batch_cifar10 = next(iter_cifar10)
+            batch_fashionmnist = next(iter_fashionmnist)
+
+            input_cifar10, target_cifar10 = batch_cifar10[0].to(device), \
+                                            batch_cifar10[1].to(device)
+            input_fashionmnist, target_fashionmnist = batch_fashionmnist[0].to(device), \
+                                                      batch_fashionmnist[1].to(device)
+            out_cifar10, _ = net(input_cifar10)
+            _, out_fashionmnist = net(input_fashionmnist)
+
+            loss_cifar10 = criterion(out_cifar10, target_cifar10)
+            loss_fashionmnist = criterion(out_fashionmnist, target_fashionmnist)
+
+            loss = loss_cifar10 + loss_fashionmnist
+            loss.backward()
+            optimizer.step()
+
+            test_loss += loss.item()
+            _, predicted_cifar10 = out_cifar10.max(1)
+            _, predicted_fashionmnist = out_fashionmnist.max(1)
+            total_cifar10 += target_cifar10.size(0)
+            total_fashionmnist += target_fashionmnist.size(0)
+            correct_cifar10 += predicted_cifar10.eq(target_cifar10).sum().item()
+            correct_fashionmnist += predicted_fashionmnist.eq(target_fashionmnist).sum().item()
+
+            progress_bar(batch_idx, min(len_test_cifar10, len_test_fashionmnist),
+                         F"Loss: {test_loss / (batch_idx + 1):.3f} | "
+                         F"Acc_CIFAR10: {100. * correct_cifar10 / total_cifar10:.3f} | "
+                         F"Acc_FashionMNIST: {100. * correct_fashionmnist / total_fashionmnist:.3f} ")
+
+    acc = 100. * correct_cifar10 / total_cifar10
+    if acc > best_acc:
+        print('Saving..')
+        state = {
+            'net': net.state_dict(),
+            'acc': acc,
+            'epoch': epoch,
+        }
+        if not os.path.isdir('checkpoint'):
+            os.mkdir('checkpoint')
+        torch.save(state, './checkpoint/chpt_resnet_2h.pth')
+        best_acc = acc
 
 
 for epoch in range(start_epoch, start_epoch + 200):
     train(epoch)
+    test(epoch)
