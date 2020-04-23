@@ -20,7 +20,6 @@ args = parser.parse_args()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('select device: ', device)
 
-l_rate = 0.1
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
@@ -73,12 +72,17 @@ if args.resume:
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=l_rate,
-                      momentum=0.9, weight_decay=5e-4)
 
 
 def train(epoch):
     print('\nEpoch: %d' % epoch)
+    l_rate = 0.1
+    if 25 <= epoch < 40:
+        l_rate *= 0.1
+    if epoch >= 40:
+        l_rate *= 0.01
+    optimizer = optim.SGD(net.parameters(), lr=l_rate,
+                          momentum=0.9, weight_decay=5e-4)
     net.train()
     train_loss = 0
     correct = 0
