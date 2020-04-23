@@ -188,8 +188,6 @@ def test(epoch):
             loss_fashionmnist = criterion(out_fashionmnist, target_fashionmnist)
 
             loss = loss_cifar10 + loss_fashionmnist
-            loss.backward()
-            optimizer.step()
 
             test_loss += loss.item()
             _, predicted_cifar10 = out_cifar10.max(1)
