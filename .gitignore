@@ -1,0 +1,9 @@
+.idea
+*.db
+*.jpg
+*.avi
+data/
+checkpoint/
+__pycache__
+.ipynb_checkpoints
+*.zip
