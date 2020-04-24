@@ -4,14 +4,12 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 
-import torchvision
-import torchvision.transforms as transforms
-
 import os
 import argparse
 
 from models import *
-from utils import  *
+from utils import *
+from transform import *
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--resume', '-r', action='store_true',
@@ -24,69 +22,6 @@ print('select device: ', device)
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
-# Data
-print('==> Preparing data..')
-
-means_cifar10 = [0.4914, 0.4822, 0.4465]
-deviations_cifar10 = [0.2023, 0.1994, 0.2010]
-means_fashionmnist = [0.5]
-deviations_fashionmnist = [0.5]
-
-transform_train_cifar10 = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize(means_cifar10, deviations_cifar10),
-    ])
-
-transform_test_cifar10 = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize(means_cifar10, deviations_cifar10),
-    ])
-
-transform_train_fashionmnist = transforms.Compose([
-    transforms.RandomCrop(28, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize(means_fashionmnist, deviations_fashionmnist),
-    transforms.Lambda(lambda x: x.repeat(3, 1, 1)),  # fashionMNIST have grayscale image, convert grayscale to "color"
-                                                    # just repeat 1 layer to 3 layer
-    ])
-
-transform_test_fashionmnist = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize(means_fashionmnist, deviations_fashionmnist),
-    transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
-    ])
-
-batch_size_train = 64
-batch_size_test = 50
-
-trainset_cifar10 = torchvision.datasets.CIFAR10(
-    root='./data', train=True, download=True, transform=transform_train_cifar10)
-trainloader_cifar10 = torch.utils.data.DataLoader(
-    trainset_cifar10, batch_size=batch_size_train, shuffle=True, num_workers=0)
-testset_cifar10 = torchvision.datasets.CIFAR10(
-    root='./data', train=False, download=True, transform=transform_test_cifar10)
-testloader_cifar10 = torch.utils.data.DataLoader(
-    testset_cifar10, batch_size=batch_size_test, shuffle=False, num_workers=0)
-
-trainset_fashionmnist = torchvision.datasets.FashionMNIST(
-    root='./data', train=True, download=True, transform=transform_train_fashionmnist)
-trainloader_fashionmnist = torch.utils.data.DataLoader(
-    trainset_fashionmnist, batch_size=batch_size_train, shuffle=True, num_workers=0)
-testset_fashionmnist = torchvision.datasets.FashionMNIST(
-    root='./data', train=False, download=True, transform=transform_test_fashionmnist)
-testloader_fashionmnist = torch.utils.data.DataLoader(
-    testset_fashionmnist, batch_size=batch_size_test, shuffle=False, num_workers=0)
-
-classes_cifar10 = ('plane', 'car', 'bird',
-                   'cat', 'deer', 'dog',
-                   'frog', 'horse', 'ship', 'truck')
-
-classes_fashionmnist = ("T-shirt/top", "Trouser", "Pullover",
-                        "Dress", "Coat", "Sandal", "Shirt",
-                        "Sneaker", "Bag", "Ankle boot")
 
 print('==> Building model..')
 net = ResNet_2head()
@@ -106,116 +41,111 @@ l_rate = 0.1
 optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e-4)
 
 
-def train(epoch):
+def train(epoch, loader, freeze_core=False):
     print('\nEpoch: %d' % epoch)
     net.train()
+    net.freeze_shared(freeze_core)
+    loader_keys = loader.keys()
 
-    # net.freeze_shared(False)
     train_loss = 0
-    total_cifar10 = 0
-    total_fashionmnist = 0
-    correct_cifar10 = 0
-    correct_fashionmnist = 0
+    total = {key: 0 for key in loader_keys}
+    correct = {key: 0 for key in loader_keys}
+    len = {key: len(loader[key]) for key in loader_keys}
+    iter_loader = {key: iter(loader[key]) for key in loader_keys}
 
-    len_train_cifar10 = len(trainloader_cifar10)
-    len_train_fashionmnist = len(trainloader_fashionmnist)
-
-    iter_cifar10 = iter(trainloader_cifar10)
-    iter_fashionmnist = iter(trainloader_fashionmnist)
-
-    for batch_idx in range(min(len_train_cifar10, len_train_fashionmnist)):
-        batch_cifar10 = next(iter_cifar10)
-        batch_fashionmnist = next(iter_fashionmnist)
-
-        input_cifar10, target_cifar10 = batch_cifar10[0].to(device), \
-                                        batch_cifar10[1].to(device)
-        input_fashionmnist, target_fashionmnist = batch_fashionmnist[0].to(device), \
-                                                  batch_fashionmnist[1].to(device)
+    for batch_idx in range(min(len.values())):
+        batch = {key: next(iter_loader[key]) for key in loader_keys}
+        input = {key: batch[key][0].to(device) for key in loader_keys}
+        target = {key: batch[key][1].to(device) for key in loader_keys}
 
         optimizer.zero_grad()
+        output = {}
+        output['cifar10'], _ = net(input['cifar10'])
+        _, output['fashionmnist'] = net(input['fashionmnist'])
 
-        out_cifar10, _ = net(input_cifar10)
-        _, out_fashionmnist = net(input_fashionmnist)
+        losses = {'cifar10': criterion(output['cifar10'], target['cifar10']),
+                  'fashionmnist': criterion(output['fashionmnist'], target['fashionmnist'])}
 
-        loss_cifar10 = criterion(out_cifar10, target_cifar10)
-        loss_fashionmnist = criterion(out_fashionmnist, target_fashionmnist)
-
-        loss = loss_cifar10 + loss_fashionmnist
+        loss = max(losses['cifar10'], losses['fashionmnist'])
+        # loss = losses['cifar10'] + losses['fashionmnist']
+        # loss = (losses['cifar10'] + losses['fashionmnist'])/2
         loss.backward()
         optimizer.step()
 
         train_loss += loss.item()
-        _, predicted_cifar10 = out_cifar10.max(1)
-        _, predicted_fashionmnist = out_fashionmnist.max(1)
-        total_cifar10 += target_cifar10.size(0)
-        total_fashionmnist += target_fashionmnist.size(0)
-        correct_cifar10 += predicted_cifar10.eq(target_cifar10).sum().item()
-        correct_fashionmnist += predicted_fashionmnist.eq(target_fashionmnist).sum().item()
 
-        progress_bar(batch_idx, min(len_train_cifar10, len_train_fashionmnist),
-                     F"Loss: {train_loss/(batch_idx+1):.3f} | "
-                     F"Acc_CIFAR10: {100.*correct_cifar10/total_cifar10:.3f} | "
-                     F"Acc_FashionMNIST: {100.*correct_fashionmnist/total_fashionmnist:.3f} ")
+        predicted = {}
+        for key in loader_keys:
+            total[key] += target[key].size(0)
+            _, predicted[key] = output[key].max(1)
+            correct[key] += predicted[key].eq(target[key]).sum().item()
+
+        acc = {key: 100.*correct[key]/total[key] for key in loader_keys}
+        batch_loss = train_loss/(batch_idx+1)
+
+        progress_bar(batch_idx, min(len['cifar10'], len['fashionmnist']),
+                     F"Loss: {batch_loss:.3f} | " +
+                     F"Acc_CIFAR10: {acc['cifar10']:.3f} | " +
+                     F"Acc_FashionMNIST: {acc['fashionmnist']:.3f} ")
+    return acc, batch_loss
 
 
-def test(epoch):
+def test(epoch, loader):
     global best_acc
     net.eval()
     test_loss = 0
-    total_cifar10 = 0
-    total_fashionmnist = 0
-    correct_cifar10 = 0
-    correct_fashionmnist = 0
-    len_test_cifar10 = len(testloader_cifar10)
-    len_test_fashionmnist = len(testloader_fashionmnist)
-
-    iter_cifar10 = iter(testloader_cifar10)
-    iter_fashionmnist = iter(testloader_fashionmnist)
+    loader_keys = loader.keys()
+    total = {key: 0 for key in loader_keys}
+    correct = {key: 0 for key in loader_keys}
+    len = {key: len(loader[key]) for key in loader_keys}
+    iter_loader = {key: iter(loader[key]) for key in loader_keys}
 
     with torch.no_grad():
-        for batch_idx in range(min(len_test_cifar10, len_test_fashionmnist)):
-            batch_cifar10 = next(iter_cifar10)
-            batch_fashionmnist = next(iter_fashionmnist)
+        for batch_idx in range(min(len.values())):
+            batch = {key: next(iter_loader[key]) for key in loader_keys}
+            input = {key: batch[key][0].to(device) for key in loader_keys}
+            target = {key: batch[key][1].to(device) for key in loader_keys}
 
-            input_cifar10, target_cifar10 = batch_cifar10[0].to(device), \
-                                            batch_cifar10[1].to(device)
-            input_fashionmnist, target_fashionmnist = batch_fashionmnist[0].to(device), \
-                                                      batch_fashionmnist[1].to(device)
-            out_cifar10, _ = net(input_cifar10)
-            _, out_fashionmnist = net(input_fashionmnist)
+            output = {}
+            output['cifar10'], _ = net(input['cifar10'])
+            _, output['fashionmnist'] = net(input['fashionmnist'])
 
-            loss_cifar10 = criterion(out_cifar10, target_cifar10)
-            loss_fashionmnist = criterion(out_fashionmnist, target_fashionmnist)
+            losses = {'cifar10': criterion(output['cifar10'], target['cifar10']),
+                      'fashionmnist': criterion(output['fashionmnist'], target['fashionmnist'])}
 
-            loss = loss_cifar10 + loss_fashionmnist
+            loss = max(losses['cifar10'], losses['fashionmnist'])
+            # loss = losses['cifar10'] + losses['fashionmnist']
+            # loss = (losses['cifar10'] + losses['fashionmnist'])/2
 
             test_loss += loss.item()
-            _, predicted_cifar10 = out_cifar10.max(1)
-            _, predicted_fashionmnist = out_fashionmnist.max(1)
-            total_cifar10 += target_cifar10.size(0)
-            total_fashionmnist += target_fashionmnist.size(0)
-            correct_cifar10 += predicted_cifar10.eq(target_cifar10).sum().item()
-            correct_fashionmnist += predicted_fashionmnist.eq(target_fashionmnist).sum().item()
+            predicted = {}
+            for key in loader_keys:
+                total[key] += target[key].size(0)
+                _, predicted[key] = output[key].max(1)
+                correct[key] += predicted[key].eq(target[key]).sum().item()
 
-            progress_bar(batch_idx, min(len_test_cifar10, len_test_fashionmnist),
-                         F"Loss: {test_loss / (batch_idx + 1):.3f} | "
-                         F"Acc_CIFAR10: {100. * correct_cifar10 / total_cifar10:.3f} | "
-                         F"Acc_FashionMNIST: {100. * correct_fashionmnist / total_fashionmnist:.3f} ")
+            acc = {key: 100. * correct[key] / total[key] for key in loader_keys}
 
-    acc = 100. * correct_cifar10 / total_cifar10
-    if acc > best_acc:
+            batch_loss = test_loss / (batch_idx + 1)
+
+            progress_bar(batch_idx, min(len['cifar10'], len['fashionmnist']),
+                         F"Loss: {batch_loss:.3f} | " +
+                         F"Acc_CIFAR10: {acc['cifar10']:.3f} | " +
+                         F"Acc_FashionMNIST: {acc['fashionmnist']:.3f} ")
+    acc_mean = sum(acc.values())/len(acc.values())
+
+    if acc_mean > best_acc:
         print('Saving..')
-        state = {
-            'net': net.state_dict(),
-            'acc': acc,
-            'epoch': epoch,
-        }
+        state = {'net': net.state_dict(),
+                 'acc': acc_mean,
+                 'epoch': epoch}
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/chpt_resnet_2h.pth')
-        best_acc = acc
+        best_acc = acc_mean
+    return acc, batch_loss
 
 
 for epoch in range(start_epoch, start_epoch + 200):
-    train(epoch)
-    test(epoch)
+    train(epoch, trainloader)
+    test(epoch, testloader)
