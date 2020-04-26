@@ -2,7 +2,7 @@
 import torch
 import os
 
-def load_net(net, path_load):
+def load_net(path_load):
     """
     Load net from file ckpt
     :param net:
@@ -11,13 +11,13 @@ def load_net(net, path_load):
     """
     print('==> Loaded net..')
     checkpoint = torch.load(path_load)
-    net.load_state_dict(checkpoint['net'])
-    best_acc = checkpoint['acc']
+    state_dict = checkpoint['net']
+    accs = checkpoint['accs']
     start_epoch = checkpoint['epoch']
-    return net
+    return state_dict, accs, start_epoch
 
 
-def save_net(net, path_save, acc_mean, epoch):
+def save_net(path_save, state_dict, accs, epoch):
     """
     Save met to file ckpt
     :param net:
@@ -26,8 +26,8 @@ def save_net(net, path_save, acc_mean, epoch):
     :param epoch:
     :return:
     """
-    state = {'net': net.state_dict(),
-             'acc': acc_mean,
+    state = {'net': state_dict,
+             'accs': accs,
              'epoch': epoch}
     torch.save(state, path_save)
 

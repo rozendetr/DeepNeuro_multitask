@@ -68,13 +68,13 @@ class DWALoss(object):
 
 class SimpleLoss(object):
 
-    def __init__(self, count_loss, count_epoch, T=-0.5):
+    def __init__(self, count_loss, count_epoch, device, T=-0.5):
         self.count_loss = count_loss
         self.count_epoch = count_epoch
         self.T = T
 
         logsigma = [T for loss in range(count_loss)]
-        self.logsigma = nn.Parameter(torch.FloatTensor(logsigma))
+        self.logsigma = nn.Parameter(torch.FloatTensor(logsigma).to(device))
 
         self.avg_cost = np.zeros([count_epoch, 2*count_loss], dtype=np.float32)
         # for every epoch avg_cost save two part of costs: costs of train and costs of valid
