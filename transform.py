@@ -29,15 +29,16 @@ transform_train['fashionmnist'] = transforms.Compose([
     transforms.RandomCrop(28, padding=4),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
-    transforms.Normalize(means['fashionmnist'], deviations['fashionmnist']),
     transforms.Lambda(lambda x: x.repeat(3, 1, 1)),  # fashionMNIST have grayscale image, convert grayscale to "color"
                                                     # just repeat 1 layer to 3 layer
+    transforms.Normalize(means['fashionmnist'], deviations['fashionmnist']),
+
     ])
 
 transform_test['fashionmnist'] = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Normalize(means['fashionmnist'], deviations['fashionmnist']),
     transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+    transforms.Normalize(means['fashionmnist'], deviations['fashionmnist']),
     ])
 
 num_workers = 0
