@@ -7,60 +7,29 @@ import os
 import argparse
 
 from models import *
-from utils import *
-from transform import *
+from utils import progress_bar
+from transform import trainloader, testloader
 from models.utils import *
 from loss import *
 
 
-parser = argparse.ArgumentParser(description='PyTorch Training multitask neuronet')
-parser.add_argument('--resume', '-r', action='store_true',
-                    help='resume from checkpoint')
-args = parser.parse_args()
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print('select device: ', device)
-
-best_acc = 0  # best test accuracy
-start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-count_epoch = 50  # count epoch from start_epoch to end of train
-
-print('==> Building model..')
-net = ResNet_2head()
-net = net.to(device)
-
-if args.resume:
-    # Load checkpoint.
-    print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/ckpt.pth')
-    net.load_state_dict(checkpoint['net'])
-    best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
-
-criterion = nn.CrossEntropyLoss()
-l_rate = 0.1
-optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e-4)
-
-total_loss = DWALoss(len(trainloader.keys()), count_epoch)
-
-def train(epoch, loader, freeze_core=False):
-    global total_loss
+def train(epoch, loader, optimizer, total_loss, freeze_core=False):
     print('\nEpoch: %d' % epoch)
     net.train()
-    net.freeze_shared(freeze_core)
-    loader_keys = loader.keys()
+    if freeze_core:
+        net.freeze_shared()
+    else:
+        net.unfreeze_shared()
 
-    train_loss = 0
+    loader_keys = loader.keys()
     total = {key: 0 for key in loader_keys}
     correct = {key: 0 for key in loader_keys}
-    len_loader = {key: len(loader[key]) for key in loader_keys}
+    count_batches = min({key: len(loader[key]) for key in loader_keys}.values())
     iter_loader = {key: iter(loader[key]) for key in loader_keys}
-    min_len_loader = min(len_loader.values())
 
     total_loss.eval_lambda_weight(epoch)
 
-    for batch_idx in range(min_len_loader):
+    for batch_idx in range(count_batches):
         batch = {key: next(iter_loader[key]) for key in loader_keys}
         input = {key: batch[key][0].to(device) for key in loader_keys}
         target = {key: batch[key][1].to(device) for key in loader_keys}
@@ -73,17 +42,9 @@ def train(epoch, loader, freeze_core=False):
         losses = {key: criterion(output[key], target[key]) for key in loader_keys}
         cost = {key: losses[key].item() for key in loader_keys}
 
-        loss = total_loss.eval_trainloss(losses, epoch, min_len_loader)
-
-        # loss = max(losses['cifar10'], losses['fashionmnist'])
-        # loss = losses['cifar10'] + losses['fashionmnist']
-        # loss = (losses['cifar10'] + losses['fashionmnist'])/2
-
+        loss = total_loss.eval_trainloss(losses, epoch, count_batches)
         loss.backward()
         optimizer.step()
-
-        # train_loss += loss.item()
-        batch_loss = total_loss.get_train_avgloss(epoch)
 
         predicted = {}
         for key in loader_keys:
@@ -92,28 +53,23 @@ def train(epoch, loader, freeze_core=False):
             correct[key] += predicted[key].eq(target[key]).sum().item()
 
         acc = {key: 100.*correct[key]/total[key] for key in loader_keys}
-        # batch_loss = train_loss/(batch_idx+1)
+        str_acc = " ".join([F"acc_{key}: {acc[key]:.3f}" for key in loader_keys])
 
-        progress_bar(batch_idx, min_len_loader,
-                     # F"Loss: {batch_loss:.3f} | " +
-                     F"Acc_CIFAR10: {acc['cifar10']:.3f} | " +
-                     F"Acc_FashionMNIST: {acc['fashionmnist']:.3f} ")
-    return acc, batch_loss
+        progress_bar(batch_idx, count_batches, str_acc)
+
+    return acc
 
 
-def test(epoch, loader):
-    global best_acc, total_loss
+def test(epoch, loader, total_loss, best_acc):
     net.eval()
-    test_loss = 0
     loader_keys = loader.keys()
     total = {key: 0 for key in loader_keys}
     correct = {key: 0 for key in loader_keys}
-    len_loader = {key: len(loader[key]) for key in loader_keys}
+    count_batches = min({key: len(loader[key]) for key in loader_keys}.values())
     iter_loader = {key: iter(loader[key]) for key in loader_keys}
-    min_len_loader = min(len_loader.values())
 
     with torch.no_grad():
-        for batch_idx in range(min_len_loader):
+        for batch_idx in range(count_batches):
             batch = {key: next(iter_loader[key]) for key in loader_keys}
             input = {key: batch[key][0].to(device) for key in loader_keys}
             target = {key: batch[key][1].to(device) for key in loader_keys}
@@ -124,12 +80,7 @@ def test(epoch, loader):
 
             losses = {key: criterion(output[key], target[key]) for key in loader_keys}
 
-            total_loss.eval_validloss(losses, epoch, min_len_loader)
-            # loss = max(losses['cifar10'], losses['fashionmnist'])
-            # loss = losses['cifar10'] + losses['fashionmnist']
-            # loss = (losses['cifar10'] + losses['fashionmnist'])/2
-
-            # test_loss += loss.item()
+            total_loss.eval_validloss(losses, epoch, count_batches)
             predicted = {}
             for key in loader_keys:
                 total[key] += target[key].size(0)
@@ -137,18 +88,15 @@ def test(epoch, loader):
                 correct[key] += predicted[key].eq(target[key]).sum().item()
 
             acc = {key: 100. * correct[key] / total[key] for key in loader_keys}
+            str_acc = " ".join(F"acc_{key}: {acc[key]:.3f}" for key in loader_keys)
 
-            # batch_loss = test_loss / (batch_idx + 1)
-            batch_loss = total_loss.get_valid_avgloss(epoch)
+            progress_bar(batch_idx, count_batches, str_acc)
 
-            progress_bar(batch_idx, min_len_loader,
-                         # F"Loss: {batch_loss:.3f} | " +
-                         F"Acc_CIFAR10: {acc['cifar10']:.3f} | " +
-                         F"Acc_FashionMNIST: {acc['fashionmnist']:.3f} ")
     acc_mean = sum(acc.values())/len(acc.values())
 
     if acc_mean > best_acc:
         print('Saving..')
+        print(F"acc_mean: {acc_mean}, best_acc: {best_acc}")
         state = {'net': net.state_dict(),
                  'acc': acc_mean,
                  'epoch': epoch}
@@ -156,11 +104,47 @@ def test(epoch, loader):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/chpt_resnet_2h.pth')
         best_acc = acc_mean
-    return acc, batch_loss
+    return acc
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='PyTorch Training multitask neuronet')
+    parser.add_argument('--resume', '-r', action='store_true',
+                        help='resume from checkpoint')
+    args = parser.parse_args()
 
-for epoch in range(start_epoch, start_epoch + count_epoch):
-    train(epoch, trainloader)
-    test(epoch, testloader)
-    print("train loss", total_loss.get_train_avgloss(epoch))
-    print("validate loss", total_loss.get_valid_avgloss(epoch))
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print('select device: ', device)
+
+    best_acc = 0  # best test accuracy
+    start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+    count_epoch = 50  # count epoch from start_epoch to end of train
+
+    print('==> Building model..')
+    net = ResNet_2head()
+    net = net.to(device)
+
+    if args.resume:
+        # Load checkpoint.
+        print('==> Resuming from checkpoint..')
+        assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+        checkpoint = torch.load('./checkpoint/ckpt.pth')
+        net.load_state_dict(checkpoint['net'])
+        best_acc = checkpoint['acc']
+        start_epoch = checkpoint['epoch']
+
+    criterion = nn.CrossEntropyLoss()
+    l_rate = 0.1
+    optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e-4)
+    total_loss = DWALoss(len(trainloader.keys()), count_epoch)
+
+    train_acc = []
+    test_acc = []
+
+    for epoch in range(start_epoch, start_epoch + count_epoch):
+        train_acc.append(train(epoch, trainloader, optimizer, total_loss))
+        test_acc.append(test(epoch, testloader, total_loss, best_acc))
+        print("train loss", total_loss.get_train_avgloss(epoch))
+        print("validate loss", total_loss.get_valid_avgloss(epoch))
+        print("train acc", train_acc[epoch])
+        print("validate acc", test_acc[epoch])
+

@@ -64,7 +64,7 @@ def format_time(seconds):
         f = '0ms'
     return f
 
-term_width=80
+term_width=85
 TOTAL_BAR_LENGTH = 65.
 last_time = time.time()
 begin_time = last_time

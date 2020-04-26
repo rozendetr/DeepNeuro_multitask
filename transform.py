@@ -88,3 +88,4 @@ classes['cifar10'] = ['plane', 'car', 'bird',
 classes['fashionmnist'] = ["T-shirt/top", "Trouser", "Pullover",
                            "Dress", "Coat", "Sandal", "Shirt",
                            "Sneaker", "Bag", "Ankle boot"]
+

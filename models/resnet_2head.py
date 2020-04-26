@@ -7,7 +7,7 @@ expansion = 1
 
 
 class ResNet_2head(nn.Module):
-    def __init__(self, expansion=1, num_classes_1=10, num_classes_2=10):
+    def __init__(self, expansion=expansion, num_classes_1=10, num_classes_2=10):
         super(ResNet_2head, self).__init__()
         self.expansion = expansion
         self.share_model = nn.Sequential(*list(model_resnet.children())[:-1])
@@ -34,9 +34,22 @@ class ResNet_2head(nn.Module):
 
         return y1, y2
 
-    def freeze_shared(self, check_freeze=False):
+    def freeze_shared(self):
+        """
+        Freeze shared net
+        :return:
+        """
         for param in self.share_model.parameters():
-            param.requires_grad = check_freeze
+            param.requires_grad = False
+
+    def unfreeze_shared(self):
+        """
+        Unfreeze shared net
+        :return:
+        """
+        for param in self.share_model.parameters():
+            param.requires_grad = True
+
 
 class ResNet_Mhead(nn.Module):
     def __init__(self, m_heads, expansion=1):
@@ -46,6 +59,7 @@ class ResNet_Mhead(nn.Module):
         """
         super(ResNet_2head, self).__init__()
         self.expansion = expansion
+        self.m_heads = m_heads
         self.share_model = nn.Sequential(*list(model_resnet.children())[:-1])
 
         # nn.Sequential(*list(model_resnet.children())[-1]).in
@@ -56,10 +70,8 @@ class ResNet_Mhead(nn.Module):
 
         #heads
         self.heads = {}
-        for key in m_heads.keys():
-            self.heads[key] = nn.Linear(256 * self.expansion, num_classes_1)
-            self.h1 = nn.Linear(256 * self.expansion, num_classes_1)
-            self.h2 = nn.Linear(256 * self.expansion, num_classes_2)
+        for key in self.m_heads.keys():
+            self.heads[key] = nn.Linear(256 * self.expansion, self.m_heads[key])
 
     def forward(self, x):
         x = self.share_model(x)
@@ -68,13 +80,25 @@ class ResNet_Mhead(nn.Module):
         x = self.relu(x)
         x = self.bn1(x)
 
-        y1 = self.h1(x)
-        y2 = self.h2(x)
+        y = []
+        for key in self.m_heads.keys():
+            y.append(self.heads[key](x))
+        return y
 
-        return y1, y2
-
-    def freeze_shared(self, check_freeze=False):
+    def freeze_shared(self):
+        """
+        Freeze shared net
+        :return:
+        """
         for param in self.share_model.parameters():
-            param.requires_grad = check_freeze
+            param.requires_grad = False
+
+    def unfreeze_shared(self):
+        """
+        Unfreeze shared net
+        :return:
+        """
+        for param in self.share_model.parameters():
+            param.requires_grad = True
 
 
