@@ -36,12 +36,15 @@ def train(epoch, loader, optimizer, total_loss, freeze_core=False):
 
         optimizer.zero_grad()
         output = {}
-        output['cifar10'], _ = net(input['cifar10'])
-        _, output['fashionmnist'] = net(input['fashionmnist'])
+        if 'cifar10' in loader_keys:
+            output['cifar10'], _ = net(input['cifar10'])
+        if 'fashionmnist' in loader_keys:
+            _, output['fashionmnist'] = net(input['fashionmnist'])
 
         losses = {key: criterion(output[key], target[key]) for key in loader_keys}
 
         loss = total_loss.eval_trainloss(losses, epoch, count_batches)
+        loss = losses['cifar10']
         loss.backward()
         optimizer.step()
 
@@ -73,8 +76,10 @@ def test(epoch, loader, total_loss):
             target = {key: batch[key][1].to(device) for key in loader_keys}
 
             output = {}
-            output['cifar10'], _ = net(input['cifar10'])
-            _, output['fashionmnist'] = net(input['fashionmnist'])
+            if 'cifar10' in loader_keys:
+                output['cifar10'], _ = net(input['cifar10'])
+            if 'fashionmnist' in loader_keys:
+                _, output['fashionmnist'] = net(input['fashionmnist'])
 
             losses = {key: criterion(output[key], target[key]) for key in loader_keys}
 
@@ -93,10 +98,14 @@ def test(epoch, loader, total_loss):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch Training multitask neuronet')
-    # parser.add_argument('--resume', '-r', action='store_true',
-    #                     help='resume from checkpoint')
     parser.add_argument('--ckpt', type=str, default='', help='resume from checkpoint')
     parser.add_argument('--out', type=str, default='checkpoint', help='output folder')
+    parser.add_argument('--freeze_core', '-r', action='store_true', help='freeze shared core')
+    parser.add_argument('--heads', type=str, default='both', help="trained heads: both, "
+                                                                  "h1(cifar10), or h2(fashion_mnist)")
+    parser.add_argument('--dwa', action='store_true', help='use Dynamic Weight Average')
+    # Dynamic Weight Average - method adaptive weighting method, named Dynamic Weight Aver-age (DWA)
+    # from article https://arxiv.org/pdf/1803.10704.pdf
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -104,7 +113,7 @@ if __name__ == '__main__':
 
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-    count_epoch = 50  # count epoch from start_epoch to end of train
+    count_epoch = 200  # count epoch from start_epoch to end of train
 
     print('==> Building model..')
     net = ResNet_2head()
@@ -120,27 +129,42 @@ if __name__ == '__main__':
             best_acc = sum(best_accs.values()) / len(best_accs.values())
             start_epoch += 1
             print("loaded acc", best_accs)
-
+    start_epoch = 0
     criterion = nn.CrossEntropyLoss()
     l_rate = 0.1
     optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e-4)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-    # total_loss = DWALoss(len(trainloader.keys()), count_epoch)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    if args.heads == "h1":
+        trainloader = {'cifar10': trainloader['cifar10']}
+        testloader = {'cifar10': testloader['cifar10']}
+        print(F"Train only head_1: {trainloader.keys()}")
+    elif args.heads == "h2":
+        trainloader = {'fashionmnist': trainloader['fashionmnist']}
+        testloader = {'fashionmnist': testloader['fashionmnist']}
+        print(F"Train only head_2: {trainloader.keys()}")
+
+        # total_loss = DWALoss(len(trainloader.keys()), count_epoch)
+    if not args.dwa:
+        print("Use simpleloss")
     total_loss = SimpleLoss(len(trainloader.keys()), count_epoch, device)
 
     train_accs = []
     test_accs = []
-    train_loss = []
 
     for epoch in range(start_epoch, start_epoch + count_epoch):
         print(F"\nEpoch: {epoch:d}")
-        train_acc = train(epoch, trainloader, optimizer, total_loss)
+        if args.freeze_core:
+            print("Freezed share core")
+            train_acc = train(epoch, trainloader, optimizer, total_loss, freeze_core=True)
+        else:
+            train_acc = train(epoch, trainloader, optimizer, total_loss, freeze_core=False)
         train_accs.append(list(train_acc.values()))
         test_acc = test(epoch, testloader, total_loss)
         test_accs.append(list(test_acc.values()))
         print(F"\nLearning_rate: {scheduler.get_lr()[0]}")
         scheduler.step()
         acc_mean = sum(test_acc.values()) / len(test_acc.values())
+        acc_mean = test_acc['cifar10']
         if acc_mean > best_acc:
             print('Saving..')
             print(F"acc_mean: {acc_mean}, best_acc: {best_acc}")
@@ -154,11 +178,14 @@ if __name__ == '__main__':
         print("train acc", train_acc)
         print("validate acc", test_acc)
 
-    pd.DataFrame(train_accs, columns=trainloader.keys()).to_csv('train_accs.csv', index=False)
-    pd.DataFrame(test_acc, columns=trainloader.keys()).to_csv('test_acc.csv', index=False)
-    pd.DataFrame(data=total_loss.get_train_avglosses(), columns=trainloader.keys()).to_csv('train_losses.csv',
-                                                                                           index=False)
-    pd.DataFrame(data=total_loss.get_valid_avglosses(), columns=trainloader.keys()).to_csv('test_losses.csv',
-                                                                                           index=False)
+        pd.DataFrame(train_accs, columns=trainloader.keys()).to_csv('train_accs.csv')
+        pd.DataFrame(test_accs, columns=trainloader.keys()).to_csv('test_accs.csv')
+        pd.DataFrame(data=total_loss.get_train_avglosses(), columns=trainloader.keys()).to_csv('train_losses.csv')
+        pd.DataFrame(data=total_loss.get_valid_avglosses(), columns=trainloader.keys()).to_csv('test_losses.csv')
+
+    pd.DataFrame(train_accs, columns=trainloader.keys()).to_csv('train_accs.csv')
+    pd.DataFrame(test_acc, columns=trainloader.keys()).to_csv('test_acc.csv')
+    pd.DataFrame(data=total_loss.get_train_avglosses(), columns=trainloader.keys()).to_csv('train_losses.csv')
+    pd.DataFrame(data=total_loss.get_valid_avglosses(), columns=trainloader.keys()).to_csv('test_losses.csv')
 
 

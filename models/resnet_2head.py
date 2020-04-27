@@ -2,7 +2,7 @@ from .resnet import *
 import torch.nn as nn
 import torch
 
-model_resnet = resnet18()
+model_resnet = resnet34()
 expansion = 1
 
 
