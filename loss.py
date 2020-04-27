@@ -38,8 +38,10 @@ class DWALoss(object):
         :return:
         """
         losses = [train_losses[key] for key in train_losses.keys()]
-        # losses = train_losses.values()
-        total_loss = torch.mean(sum(self.lambda_weight[i, index_epoch] * losses[i] for i in range(len(losses))))
+        if len(train_losses.keys()) == 1:
+            total_loss = losses[0]
+        else:
+            total_loss = torch.mean(sum(self.lambda_weight[i, index_epoch] * losses[i] for i in range(len(losses))))
         costs = np.array([loss.item() for loss in losses],  dtype=np.float32)
         self.avg_cost[index_epoch, :self.count_loss] += costs / count_train_batch
         return total_loss
@@ -52,7 +54,6 @@ class DWALoss(object):
         :param count_valid_batch:counts of validate batches
         :return:
         """
-        # losses = valid_losses.values()
         losses = [valid_losses[key] for key in valid_losses.keys()]
         costs = np.array([loss.item() for loss in losses],  dtype=np.float32)
         self.avg_cost[index_epoch, self.count_loss:] += costs / count_valid_batch
@@ -82,6 +83,9 @@ class SimpleLoss(object):
 
         self.avg_cost = np.zeros([count_epoch, 2*count_loss], dtype=np.float32)
         # for every epoch avg_cost save two part of costs: costs of train and costs of valid
+
+    def eval_lambda_weight(self, index_epoch):
+        pass
 
     def eval_trainloss(self, train_losses, index_epoch, count_train_batch):
         """

@@ -27,7 +27,7 @@ def train(epoch, loader, optimizer, total_loss, freeze_core=False):
     count_batches = min({key: len(loader[key]) for key in loader_keys}.values())
     iter_loader = {key: iter(loader[key]) for key in loader_keys}
 
-    # total_loss.eval_lambda_weight(epoch)
+    total_loss.eval_lambda_weight(epoch)
 
     for batch_idx in range(count_batches):
         batch = {key: next(iter_loader[key]) for key in loader_keys}
@@ -44,7 +44,6 @@ def train(epoch, loader, optimizer, total_loss, freeze_core=False):
         losses = {key: criterion(output[key], target[key]) for key in loader_keys}
 
         loss = total_loss.eval_trainloss(losses, epoch, count_batches)
-        loss = losses['cifar10']
         loss.backward()
         optimizer.step()
 
@@ -143,10 +142,12 @@ if __name__ == '__main__':
         testloader = {'fashionmnist': testloader['fashionmnist']}
         print(F"Train only head_2: {trainloader.keys()}")
 
-        # total_loss = DWALoss(len(trainloader.keys()), count_epoch)
     if not args.dwa:
-        print("Use simpleloss")
-    total_loss = SimpleLoss(len(trainloader.keys()), count_epoch, device)
+        print("Use SimpleLoss")
+        total_loss = SimpleLoss(len(trainloader.keys()), count_epoch, device)
+    else:
+        print("Use DWALoss")
+        total_loss = DWALoss(len(trainloader.keys()), count_epoch)
 
     train_accs = []
     test_accs = []
@@ -164,7 +165,6 @@ if __name__ == '__main__':
         print(F"\nLearning_rate: {scheduler.get_lr()[0]}")
         scheduler.step()
         acc_mean = sum(test_acc.values()) / len(test_acc.values())
-        acc_mean = test_acc['cifar10']
         if acc_mean > best_acc:
             print('Saving..')
             print(F"acc_mean: {acc_mean}, best_acc: {best_acc}")
