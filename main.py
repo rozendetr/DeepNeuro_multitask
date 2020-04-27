@@ -98,7 +98,7 @@ def test(epoch, loader, total_loss):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch Training multitask neuronet')
     parser.add_argument('--ckpt', type=str, default='', help='resume from checkpoint')
-    parser.add_argument('--out', type=str, default='checkpoint', help='output folder')
+    parser.add_argument('--out', type=str, default='./checkpoint', help='output folder')
     parser.add_argument('--freeze_core', '-r', action='store_true', help='freeze shared core')
     parser.add_argument('--heads', type=str, default='both', help="trained heads: both, "
                                                                   "h1(cifar10), or h2(fashion_mnist)")
@@ -133,14 +133,17 @@ if __name__ == '__main__':
     l_rate = 0.1
     optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e-4)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    name_save_file = "chpt_resnet34_2h.pth"
     if args.heads == "h1":
         trainloader = {'cifar10': trainloader['cifar10']}
         testloader = {'cifar10': testloader['cifar10']}
         print(F"Train only head_1: {trainloader.keys()}")
+        name_save_file = "chpt_resnet34_cifar10.pth"
     elif args.heads == "h2":
         trainloader = {'fashionmnist': trainloader['fashionmnist']}
         testloader = {'fashionmnist': testloader['fashionmnist']}
         print(F"Train only head_2: {trainloader.keys()}")
+        name_save_file = "chpt_resnet34_fashionmnist.pth"
 
     if not args.dwa:
         print("Use SimpleLoss")
@@ -168,9 +171,10 @@ if __name__ == '__main__':
         if acc_mean > best_acc:
             print('Saving..')
             print(F"acc_mean: {acc_mean}, best_acc: {best_acc}")
-            if not os.path.isdir('checkpoint'):
-                os.mkdir('checkpoint')
-            save_net('./checkpoint/chpt_resnet_2h.pth', net.state_dict(), test_acc, epoch)
+            if not os.path.isdir(args.out):
+                print(F"create directory {args.out}")
+                os.mkdir(args.out)
+            save_net(os.path.join(args.out, name_save_file), net.state_dict(), test_acc, epoch)
             best_acc = acc_mean
 
         print("train loss", total_loss.get_train_avgloss(epoch))
@@ -178,14 +182,11 @@ if __name__ == '__main__':
         print("train acc", train_acc)
         print("validate acc", test_acc)
 
-        pd.DataFrame(train_accs, columns=trainloader.keys()).to_csv('train_accs.csv')
-        pd.DataFrame(test_accs, columns=trainloader.keys()).to_csv('test_accs.csv')
-        pd.DataFrame(data=total_loss.get_train_avglosses(), columns=trainloader.keys()).to_csv('train_losses.csv')
-        pd.DataFrame(data=total_loss.get_valid_avglosses(), columns=trainloader.keys()).to_csv('test_losses.csv')
-
-    pd.DataFrame(train_accs, columns=trainloader.keys()).to_csv('train_accs.csv')
-    pd.DataFrame(test_acc, columns=trainloader.keys()).to_csv('test_acc.csv')
-    pd.DataFrame(data=total_loss.get_train_avglosses(), columns=trainloader.keys()).to_csv('train_losses.csv')
-    pd.DataFrame(data=total_loss.get_valid_avglosses(), columns=trainloader.keys()).to_csv('test_losses.csv')
+        pd.DataFrame(train_accs, columns=trainloader.keys()).to_csv(os.path.join(args.out, 'train_accs.csv'))
+        pd.DataFrame(test_accs, columns=trainloader.keys()).to_csv(os.path.join(args.out, 'test_accs.csv'))
+        pd.DataFrame(data=total_loss.get_train_avglosses(),
+                     columns=trainloader.keys()).to_csv(os.path.join(args.out, 'train_losses.csv'))
+        pd.DataFrame(data=total_loss.get_valid_avglosses(),
+                     columns=trainloader.keys()).to_csv(os.path.join(args.out, 'test_losses.csv'))
 
 
