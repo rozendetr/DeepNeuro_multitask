@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
+from torch.optim import lr_scheduler
+import pandas as pd
 
 import os
 import argparse
@@ -119,34 +120,45 @@ if __name__ == '__main__':
             best_acc = sum(best_accs.values()) / len(best_accs.values())
             start_epoch += 1
             print("loaded acc", best_accs)
-            
+
     criterion = nn.CrossEntropyLoss()
     l_rate = 0.1
     optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e-4)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     # total_loss = DWALoss(len(trainloader.keys()), count_epoch)
     total_loss = SimpleLoss(len(trainloader.keys()), count_epoch, device)
 
     train_accs = []
     test_accs = []
+    train_loss = []
 
     for epoch in range(start_epoch, start_epoch + count_epoch):
         print(F"\nEpoch: {epoch:d}")
         train_acc = train(epoch, trainloader, optimizer, total_loss)
-        train_accs.append(train_acc)
+        train_accs.append(list(train_acc.values()))
         test_acc = test(epoch, testloader, total_loss)
-        test_accs.append(test_acc)
-
+        test_accs.append(list(test_acc.values()))
+        print(F"\nLearning_rate: {scheduler.get_lr()[0]}")
+        scheduler.step()
         acc_mean = sum(test_acc.values()) / len(test_acc.values())
         if acc_mean > best_acc:
             print('Saving..')
             print(F"acc_mean: {acc_mean}, best_acc: {best_acc}")
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
-            save_net('./checkpoint/chpt_resnet_2h.pth', net.state_dict(), test_accs[epoch], epoch)
+            save_net('./checkpoint/chpt_resnet_2h.pth', net.state_dict(), test_acc, epoch)
             best_acc = acc_mean
 
         print("train loss", total_loss.get_train_avgloss(epoch))
         print("validate loss", total_loss.get_valid_avgloss(epoch))
-        print("train acc", train_accs[epoch])
-        print("validate acc", test_accs[epoch])
+        print("train acc", train_acc)
+        print("validate acc", test_acc)
+
+    pd.DataFrame(train_accs, columns=trainloader.keys()).to_csv('train_accs.csv', index=False)
+    pd.DataFrame(test_acc, columns=trainloader.keys()).to_csv('test_acc.csv', index=False)
+    pd.DataFrame(data=total_loss.get_train_avglosses(), columns=trainloader.keys()).to_csv('train_losses.csv',
+                                                                                           index=False)
+    pd.DataFrame(data=total_loss.get_valid_avglosses(), columns=trainloader.keys()).to_csv('test_losses.csv',
+                                                                                           index=False)
+
 

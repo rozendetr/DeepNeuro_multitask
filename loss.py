@@ -65,6 +65,12 @@ class DWALoss(object):
     def get_valid_avgloss(self, index_epoch):
         return self.avg_cost[index_epoch, self.count_loss:]
 
+    def get_train_avglosses(self):
+        return self.avg_cost[:, :self.count_loss]
+
+    def get_valid_avglosses(self):
+        return self.avg_cost[:, self.count_loss:]
+
 
 class SimpleLoss(object):
 
@@ -111,5 +117,11 @@ class SimpleLoss(object):
 
     def get_valid_avgloss(self, index_epoch):
         return self.avg_cost[index_epoch, self.count_loss:]
+
+    def get_train_avglosses(self):
+        return self.avg_cost[:, :self.count_loss]
+
+    def get_valid_avglosses(self):
+        return self.avg_cost[:, self.count_loss:]
 
 
