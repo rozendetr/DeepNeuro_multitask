@@ -39,9 +39,11 @@ Share core использовалось на основе ResNet34
 - Обучение только на FashionMNIST: accuracity (positive_prediction/total) на валидации: 93.25
 
 Обучение multi_task  c использованием CIFAR10 и FashionMNIST: 
+
 используя SimpleLOSS:
 accuracity (positive_prediction/total) на валидации: 
 - h1(CIFAR10):81.22, h2(FashionMNIST):83.33
+
 используя DWALOSS:
 accuracity (positive_prediction/total) на валидации: 
 - h1(CIFAR10):80.22, h2(FashionMNIST):83.62
