@@ -9,39 +9,39 @@
 Для нахождения баланса между двумя подзадачами (для двух лоссов) использовалось два метода: SimpleLoss(как некое среднее) и 
 метод, предложенный в статье [End-to-End Multi-Task Learning with Attention](https://arxiv.org/abs/1803.10704), [Shikun Liu](http://shikun.io/), [Edward Johns](https://www.robot-learning.uk/), and [Andrew Davison](https://www.doc.ic.ac.uk/~ajd/)
 
-##Запуск TRAIN
+## Запуск TRAIN
 python3 train.py **flags
 flags:
---ckpt             путь к предобученной модели *.pth (по умолчанию '' -  не загружать)
---out              директория сохранения весов (по умолчанию './checkpoint')
---freeze_core      заморизить shared net (по умолчанию False)
---heads            обучить конктреные "головы": both, h1, h2 (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
---dwa              использовать Dynamic Weight Average(DWA) 
+1. --ckpt             путь к предобученной модели *.pth (по умолчанию '' -  не загружать)
+2. --out              директория сохранения весов (по умолчанию './checkpoint')
+3. --freeze_core      заморизить shared net (по умолчанию False)
+4. --heads            обучить конктреные "головы": both, h1, h2 (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
+5. --dwa              использовать Dynamic Weight Average(DWA) 
 
-###Пример: 
+### Пример: 
 для трeнировки только на cifar10
 python train.py --heads h1 --out chkpt_cifar10 --ckpt ./chkpt_cifar10/chpt_resnet34_cifar10.pth
 для тренировки на cifar10 и FashionMNIST
 python train.py --out chkpt_multitask --dwa
 
-##Запуск TEST
+## Запуск TEST
 python3 test.py **flags
---ckpt             путь к предобученной модели *.pth (по умолчанию '' -  не загружать)
---heads            вывести значение конктреной "головы": both, h1, h2 (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
+1. --ckpt             путь к предобученной модели *.pth (по умолчанию '' -  не загружать)
+2. --heads            вывести значение конктреной "головы": both, h1, h2 (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
 
-###Пример: 
+### Пример: 
 python test.py --heads h1 --ckpt ./chkpt_cifar10/chpt_resnet34_cifar10.pth
 
 
-##Эксперементы:
+## Эксперементы:
 Share core использовалось на основе ResNet34
-Обучение только на CIFAR10: accuracity (positive_prediction/total) на валидации: 88.02
-Обучение только на FashionMNIST: accuracity (positive_prediction/total) на валидации: 93.25
+1. Обучение только на CIFAR10: accuracity (positive_prediction/total) на валидации: 88.02
+2. Обучение только на FashionMNIST: accuracity (positive_prediction/total) на валидации: 93.25
 
 Обучение multi_task  c использованием CIFAR10 и FashionMNIST: 
 используя SimpleLOSS:
 accuracity (positive_prediction/total) на валидации: 
-h1(CIFAR10):81.22, h2(FashionMNIST):83.33
+1. h1(CIFAR10):81.22, h2(FashionMNIST):83.33
 используя DWALOSS:
 accuracity (positive_prediction/total) на валидации: 
-h1(CIFAR10):80.22, h2(FashionMNIST):83.62
+2. h1(CIFAR10):80.22, h2(FashionMNIST):83.62
