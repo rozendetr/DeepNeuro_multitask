@@ -28,7 +28,8 @@ python train.py --out chkpt_multitask --dwa
 ## Запуск TEST
 python3 test.py **flags
 - --ckpt             путь к предобученной модели *.pth (по умолчанию '' -  не загружать)
-- --heads            вывести значение конктреной "головы": both, h1, h2 (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
+- --heads            вывести значение конктреной "головы": both, h1, h2  
+                     (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
 
 ### Пример: 
 python test.py --heads h1 --ckpt ./chkpt_cifar10/chpt_resnet34_cifar10.pth
