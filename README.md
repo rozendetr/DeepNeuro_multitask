@@ -15,7 +15,8 @@ flags:
 - --ckpt             путь к предобученной модели *.pth (по умолчанию '' -  не загружать)
 - --out              директория сохранения весов (по умолчанию './checkpoint')
 - --freeze_core      заморизить shared net (по умолчанию False)
-- --heads            обучить конктреные "головы": both, h1, h2 (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
+- --heads            обучить конктреные "головы": both, h1, h2  
+                     (h1 - CIFAR10, h2 - FashionMNIST, both - multitask) (по умолчанию multitask)
 - --dwa              использовать Dynamic Weight Average(DWA) 
 
 ### Пример: 
