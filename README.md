@@ -20,10 +20,9 @@ flags:
 
 ### Пример: 
 для трeнировки только на cifar10
-
 python train.py --heads h1 --out chkpt_cifar10 --ckpt ./chkpt_cifar10/chpt_resnet34_cifar10.pth
-для тренировки на cifar10 и FashionMNIST
 
+для тренировки на cifar10 и FashionMNIST
 python train.py --out chkpt_multitask --dwa
 
 ## Запуск TEST
