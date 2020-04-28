@@ -132,7 +132,7 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
     l_rate = 0.1
     optimizer = optim.SGD(net.parameters(), lr=l_rate, momentum=0.9, weight_decay=5e-4)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
     name_save_file = "chpt_resnet34_2h.pth"
     if args.heads == "h1":
         trainloader = {'cifar10': trainloader['cifar10']}

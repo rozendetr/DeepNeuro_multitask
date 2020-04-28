@@ -3,11 +3,11 @@
 *.jpg
 *.avi
 data/
-checkpoint/
 __pycache__
 .ipynb_checkpoints
 *.zip
 *.csv
 *.pth
-etaps/
 *.ipynb
+*.7z
+*.rar

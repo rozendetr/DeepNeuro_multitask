@@ -1,4 +1,5 @@
 from .resnet import *
+from .mish import BetaMish
 import torch.nn as nn
 import torch
 
@@ -14,6 +15,8 @@ class ResNet_2head(nn.Module):
 
         # nn.Sequential(*list(model_resnet.children())[-1]).in
         self.relu = nn.ReLU(inplace=True)
+        self.mish = BetaMish(beta=1.5)
+
 
         self.fc1 = nn.Linear(512 * self.expansion, 256 * self.expansion)
         self.bn1 = nn.BatchNorm1d(256 * self.expansion, eps=2e-1)
@@ -26,7 +29,8 @@ class ResNet_2head(nn.Module):
         x = self.share_model(x)
         x = torch.flatten(x, 1)
         x = self.fc1(x)
-        x = self.relu(x)
+        # x = self.relu(x)
+        x = self.mish(x)
         x = self.bn1(x)
 
         y1 = self.h1(x)
